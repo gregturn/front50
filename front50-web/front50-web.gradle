@@ -53,6 +53,7 @@ dependencies {
   compile spinnaker.dependency("korkWeb")
   compile spinnaker.dependency("korkSwagger")
   compile spinnaker.dependency("kork")
+  compile 'org.springframework.cloud:spring-cloud-starter-config:1.0.3.RELEASE'
 }
 
 applicationName = "front50"
