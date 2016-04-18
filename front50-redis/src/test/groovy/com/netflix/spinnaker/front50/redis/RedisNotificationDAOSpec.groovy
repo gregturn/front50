@@ -101,8 +101,7 @@ class RedisNotificationDAOSpec extends Specification {
   }
 
   void deleteAll() {
-    redisNotificationDAO.redisTemplate.delete(redisNotificationDAO.redisTemplate.keys(RedisNotificationDAO.key('*')))
-    redisNotificationDAO.stringRedisTemplate.delete(RedisNotificationDAO.bookkeepingKey())
+    redisNotificationDAO.redisTemplate.delete(RedisNotificationDAO.bookkeepingKey())
   }
 
 }

@@ -149,8 +149,7 @@ class RedisProjectDAOSpec extends Specification {
   }
 
   void deleteAll() {
-    redisProjectDAO.redisTemplate.delete(redisProjectDAO.redisTemplate.keys(RedisProjectDAO.key('*')))
-    redisProjectDAO.stringRedisTemplate.delete(RedisProjectDAO.bookkeepingKey())
+    redisProjectDAO.redisTemplate.delete(RedisProjectDAO.bookkeepingKey())
   }
 
 

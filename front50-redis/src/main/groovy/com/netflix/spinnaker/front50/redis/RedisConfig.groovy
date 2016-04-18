@@ -15,7 +15,6 @@
  */
 
 package com.netflix.spinnaker.front50.redis
-
 import com.netflix.spinnaker.front50.model.application.Application
 import com.netflix.spinnaker.front50.model.notification.Notification
 import com.netflix.spinnaker.front50.model.pipeline.Pipeline
@@ -26,7 +25,6 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory
 import org.springframework.data.redis.core.RedisTemplate
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer
 import org.springframework.data.redis.serializer.StringRedisSerializer
 /**
@@ -38,16 +36,14 @@ class RedisConfig {
 
   @Bean
   RedisApplicationDAO redisApplicationDAO(RedisTemplate<String, Application> template,
-                                          StringRedisTemplate stringRedisTemplate,
                                           RedisConnectionFactory connectionFactory) {
-    new RedisApplicationDAO(redisTemplate: template, stringRedisTemplate: stringRedisTemplate, factory: connectionFactory)
+    new RedisApplicationDAO(redisTemplate: template, factory: connectionFactory)
   }
 
   @Bean
   RedisProjectDAO redisProjectDAO(RedisTemplate<String, Project> template,
-                                  StringRedisTemplate stringRedisTemplate,
                                   RedisConnectionFactory connectionFactory) {
-    new RedisProjectDAO(redisTemplate: template, stringRedisTemplate: stringRedisTemplate, factory: connectionFactory)
+    new RedisProjectDAO(redisTemplate: template, factory: connectionFactory)
   }
 
   @Bean
@@ -63,9 +59,8 @@ class RedisConfig {
   }
 
   @Bean
-  RedisNotificationDAO redisNotificationDAO(RedisTemplate<String, Notification> template,
-                                            StringRedisTemplate stringRedisTemplate) {
-    new RedisNotificationDAO(redisTemplate: template, stringRedisTemplate: stringRedisTemplate)
+  RedisNotificationDAO redisNotificationDAO(RedisTemplate<String, Notification> template) {
+    new RedisNotificationDAO(redisTemplate: template)
   }
 
   @Bean
@@ -74,66 +69,56 @@ class RedisConfig {
   }
 
   @Bean
-  RedisTemplate<String, Application> applicationRedisTemplate(RedisConnectionFactory connectionFactory) {
+  RedisTemplate<String, Application> applicationRedisTemplate(RedisConnectionFactory connectionFactory,
+                                                              StringRedisSerializer stringRedisSerializer) {
 
     RedisTemplate<String, Application> template = new RedisTemplate<>()
     template.connectionFactory = connectionFactory
-    template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Application))
-    template.setKeySerializer(new StringRedisSerializer())
-    template.hashKeySerializer = template.keySerializer
-    template.hashValueSerializer = template.valueSerializer
+    template.hashKeySerializer = stringRedisSerializer
+    template.hashValueSerializer = new Jackson2JsonRedisSerializer<>(Application)
 
     template
   }
 
   @Bean
-  RedisTemplate<String, Project> projectRedisTemplate(RedisConnectionFactory connectionFactory) {
+  RedisTemplate<String, Project> projectRedisTemplate(RedisConnectionFactory connectionFactory,
+                                                      StringRedisSerializer stringRedisSerializer) {
 
     RedisTemplate<String, Project> template = new RedisTemplate<>()
     template.connectionFactory = connectionFactory
-    template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Project))
-    template.setKeySerializer(new StringRedisSerializer())
-    template.hashKeySerializer = template.keySerializer
-    template.hashValueSerializer = template.valueSerializer
+    template.hashKeySerializer = stringRedisSerializer
+    template.hashValueSerializer = new Jackson2JsonRedisSerializer<>(Project)
 
     template
   }
 
   @Bean
-  RedisTemplate<String, Pipeline> pipelineRedisTemplate(RedisConnectionFactory connectionFactory) {
+  RedisTemplate<String, Pipeline> pipelineRedisTemplate(RedisConnectionFactory connectionFactory,
+                                                        StringRedisSerializer stringRedisSerializer) {
 
     RedisTemplate<String, Pipeline> template = new RedisTemplate<>()
     template.connectionFactory = connectionFactory
-    template.valueSerializer = new Jackson2JsonRedisSerializer<>(Pipeline)
-    template.keySerializer = new StringRedisSerializer()
-    template.hashKeySerializer = template.keySerializer
-    template.hashValueSerializer = template.valueSerializer
+    template.hashKeySerializer = stringRedisSerializer
+    template.hashValueSerializer = new Jackson2JsonRedisSerializer<>(Pipeline)
 
     template
   }
 
   @Bean
-  RedisTemplate<String, Notification> notificationRedisTemplate(RedisConnectionFactory connectionFactory) {
+  RedisTemplate<String, Notification> notificationRedisTemplate(RedisConnectionFactory connectionFactory,
+                                                                StringRedisSerializer stringRedisSerializer) {
 
     RedisTemplate<String, Notification> template = new RedisTemplate<>()
     template.connectionFactory = connectionFactory
-    template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Notification))
-    template.setKeySerializer(new StringRedisSerializer())
-    template.hashKeySerializer = template.keySerializer
-    template.hashValueSerializer = template.valueSerializer
+    template.hashKeySerializer = stringRedisSerializer
+    template.hashValueSerializer = new Jackson2JsonRedisSerializer<>(Notification)
 
     template
   }
 
   @Bean
-  StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
-
-    StringRedisTemplate template = new StringRedisTemplate()
-    template.connectionFactory = connectionFactory
-    template.setValueSerializer(new StringRedisSerializer())
-    template.setKeySerializer(new StringRedisSerializer())
-
-    template
+  StringRedisSerializer stringRedisSerializer() {
+    new StringRedisSerializer()
   }
 
 }

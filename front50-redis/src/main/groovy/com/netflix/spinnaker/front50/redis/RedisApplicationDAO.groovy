@@ -15,17 +15,12 @@
  */
 
 package com.netflix.spinnaker.front50.redis
-
 import com.netflix.spinnaker.front50.exception.NotFoundException
 import com.netflix.spinnaker.front50.model.application.Application
 import com.netflix.spinnaker.front50.model.application.ApplicationDAO
 import org.springframework.data.redis.connection.RedisConnectionFactory
-import org.springframework.data.redis.core.RedisOperations
 import org.springframework.data.redis.core.RedisTemplate
-import org.springframework.data.redis.core.SessionCallback
-import org.springframework.data.redis.core.StringRedisTemplate
-import org.springframework.util.Assert
-
+import org.springframework.data.redis.core.ScanOptions
 /**
  * Implementation of {@link ApplicationDAO} interface, leveraging {@link RedisTemplate} to do the
  * heavy lifting.
@@ -36,17 +31,11 @@ class RedisApplicationDAO implements ApplicationDAO {
 
   RedisTemplate<String, Application> redisTemplate
 
-  StringRedisTemplate stringRedisTemplate
-
   RedisConnectionFactory factory
 
   @Override
   Application findByName(String name) throws NotFoundException {
-    def results = redisTemplate.opsForValue().get(key(name))
-    if (!results) {
-      throw new NotFoundException("No Application found by name of ${name}")
-    }
-    results
+    findById(name)
   }
 
   @Override
@@ -56,7 +45,7 @@ class RedisApplicationDAO implements ApplicationDAO {
 
   @Override
   Application findById(String name) throws NotFoundException {
-    def app = redisTemplate.opsForValue().get(key(name))
+    def app = redisTemplate.opsForHash().get(bookkeepingKey(), name.toUpperCase())
     if (!app) {
       throw new NotFoundException("No application found by id ${name}")
     }
@@ -65,9 +54,8 @@ class RedisApplicationDAO implements ApplicationDAO {
 
   @Override
   Collection<Application> all() {
-    def applications = stringRedisTemplate.opsForSet()
-        .members(bookkeepingKey())
-        .collect { redisTemplate.opsForValue().get(it) }
+    def applications = redisTemplate.opsForHash().scan(bookkeepingKey(), ScanOptions.scanOptions().match('*').build())
+        .collect { it.value }
 
     if (!applications) {
       throw new NotFoundException("No applications available")
@@ -78,23 +66,14 @@ class RedisApplicationDAO implements ApplicationDAO {
 
   @Override
   Application create(String id, Application application) {
-    redisTemplate.execute({ RedisOperations<String, Application> operations ->
-      operations.multi()
+    if (!application.createTs) {
+      application.createTs = System.currentTimeMillis() as String
+    }
+    application.name = id.toUpperCase()
 
-      if (!application.createTs) {
-        application.createTs = System.currentTimeMillis() as String
-      }
-      application.name = id.toUpperCase()
+    redisTemplate.opsForHash().put(bookkeepingKey(), application.name, application)
 
-      def key = key(id)
-
-      redisTemplate.opsForValue().set(key, application)
-      stringRedisTemplate.opsForSet().add(bookkeepingKey(), key)
-
-      operations.exec()
-
-      application
-    } as SessionCallback)
+    application
   }
 
   @Override
@@ -107,16 +86,7 @@ class RedisApplicationDAO implements ApplicationDAO {
 
   @Override
   void delete(String id) {
-    redisTemplate.execute({ RedisOperations<String, Application> operations ->
-      operations.multi()
-
-      def key = key(id)
-
-      stringRedisTemplate.opsForSet().remove(bookkeepingKey(), key)
-      redisTemplate.delete(key)
-
-      operations.exec()
-    } as SessionCallback)
+    redisTemplate.opsForHash().delete(bookkeepingKey(), id.toUpperCase())
   }
 
   @Override
@@ -128,6 +98,7 @@ class RedisApplicationDAO implements ApplicationDAO {
   boolean isHealthy() {
     try {
       def conn = factory.connection
+      conn.ping()
       conn.close()
       return true
     } catch (Exception e) {
@@ -135,13 +106,8 @@ class RedisApplicationDAO implements ApplicationDAO {
     }
   }
 
-  static String key(String name) {
-    Assert.notNull(name, 'name can NOT be null!')
-    "com.netflix.spinnaker:front50:applications:key:${name.toUpperCase()}".toString()
-  }
-
   static String bookkeepingKey() {
-    'com.netflix.spinnaker:front50:applications:keys'
+    'com.netflix.spinnaker:front50:applications'
   }
 
 }

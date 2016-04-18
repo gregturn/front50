@@ -15,17 +15,12 @@
  */
 
 package com.netflix.spinnaker.front50.redis
-
 import com.netflix.spinnaker.front50.exception.NotFoundException
 import com.netflix.spinnaker.front50.model.project.Project
 import com.netflix.spinnaker.front50.model.project.ProjectDAO
 import org.springframework.data.redis.connection.RedisConnectionFactory
-import org.springframework.data.redis.core.RedisOperations
 import org.springframework.data.redis.core.RedisTemplate
-import org.springframework.data.redis.core.SessionCallback
-import org.springframework.data.redis.core.StringRedisTemplate
-import org.springframework.util.Assert
-
+import org.springframework.data.redis.core.ScanOptions
 /**
  * @author Greg Turnquist
  */
@@ -33,13 +28,11 @@ class RedisProjectDAO implements ProjectDAO {
 
   RedisTemplate<String, Project> redisTemplate
 
-  StringRedisTemplate stringRedisTemplate
-
   RedisConnectionFactory factory
 
   @Override
   Project findByName(String name) throws NotFoundException {
-    def results = redisTemplate.opsForValue().get(key(name))
+    def results = all().find { it.name == name }
     if (!results) {
       throw new NotFoundException("No Project found by name of ${name}")
     }
@@ -52,7 +45,7 @@ class RedisProjectDAO implements ProjectDAO {
 
   @Override
   Project findById(String id) throws NotFoundException {
-    def results = redisTemplate.opsForValue().get(key(id))
+    def results = redisTemplate.opsForHash().get(bookkeepingKey(), id)
     if (!results) {
       throw new NotFoundException("No Project found by id of ${id}")
     }
@@ -61,33 +54,21 @@ class RedisProjectDAO implements ProjectDAO {
 
   @Override
   Collection<Project> all() {
-    stringRedisTemplate.opsForSet()
-        .members(bookkeepingKey())
-        .collect { redisTemplate.opsForValue().get(it) }
+    redisTemplate.opsForHash().scan(bookkeepingKey(), ScanOptions.scanOptions().match('*').build())
+        .collect { it.value }
   }
 
   @Override
   Project create(String id, Project item) {
-    redisTemplate.execute({ RedisOperations<String, Project> operations ->
-      operations.multi()
+    item.id = id ?: UUID.randomUUID().toString()
 
-      item.id = id
-      if (!item.id) {
-        item.id = UUID.randomUUID().toString()
-      }
-      if (!item.createTs) {
-        item.createTs = System.currentTimeMillis()
-      }
+    if (!item.createTs) {
+      item.createTs = System.currentTimeMillis()
+    }
 
-      def key = key(item.id)
+    redisTemplate.opsForHash().put(bookkeepingKey(), item.id, item)
 
-      redisTemplate.opsForValue().set(key, item)
-      stringRedisTemplate.opsForSet().add(bookkeepingKey(), key)
-
-      operations.exec()
-
-      item
-    } as SessionCallback)
+    item
   }
 
   @Override
@@ -98,16 +79,7 @@ class RedisProjectDAO implements ProjectDAO {
 
   @Override
   void delete(String id) {
-    redisTemplate.execute({ RedisOperations<String, Project> operations ->
-      operations.multi()
-
-      def key = key(id)
-
-      stringRedisTemplate.opsForSet().remove(bookkeepingKey(), key)
-      redisTemplate.delete(key)
-
-      operations.exec()
-    } as SessionCallback)
+    redisTemplate.opsForHash().delete(bookkeepingKey(), id)
   }
 
   @Override
@@ -119,6 +91,7 @@ class RedisProjectDAO implements ProjectDAO {
   boolean isHealthy() {
     try {
       def conn = factory.connection
+      conn.ping()
       conn.close()
       return true
     } catch (Exception e) {
@@ -126,13 +99,8 @@ class RedisProjectDAO implements ProjectDAO {
     }
   }
 
-  static String key(String id) {
-    Assert.notNull(id, 'id can NOT be null!')
-    "com.netflix.spinnaker:front50:projects:key:${id}".toString()
-  }
-
   static String bookkeepingKey() {
-    'com.netflix.spinnaker:front50:projects:keys'
+    'com.netflix.spinnaker:front50:projects'
   }
 
 }
