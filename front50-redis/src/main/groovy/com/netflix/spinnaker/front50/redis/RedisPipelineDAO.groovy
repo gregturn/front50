@@ -35,12 +35,16 @@ class RedisPipelineDAO implements PipelineDAO {
 
   @Override
   String getPipelineId(String application, String pipelineName) {
-    redisTemplate.opsForHash().get(bookkeepingKey(), key(application, pipelineName)).id
+    redisTemplate.opsForHash().values(bookkeepingKey()).find {
+      it.application == application && it.name == pipelineName
+    }.id
   }
 
   @Override
   Collection<Pipeline> getPipelinesByApplication(String application) {
-    [redisTemplate.opsForHash().get(bookkeepingKey(), application)]
+    redisTemplate.opsForHash().values(bookkeepingKey()).findAll {
+      it.application == application
+    }
   }
 
   @Override
@@ -54,7 +58,7 @@ class RedisPipelineDAO implements PipelineDAO {
 
   @Override
   Collection<Pipeline> all() {
-    redisTemplate.opsForSet().members(allKey())
+    redisTemplate.opsForHash().values(bookkeepingKey())
   }
 
   @Override
@@ -69,31 +73,19 @@ class RedisPipelineDAO implements PipelineDAO {
     }
 
     redisTemplate.opsForHash().put(bookkeepingKey(), key(item.id), item)
-    redisTemplate.opsForHash().put(bookkeepingKey(), item.application, item)
-    redisTemplate.opsForHash().put(bookkeepingKey(), key(item.application, item.name), item)
-    redisTemplate.opsForSet().add(allKey(), item)
 
     item
   }
 
   @Override
   void update(String id, Pipeline item) {
-
-    redisTemplate.opsForSet().remove(allKey(), findById(id))
-
     item.lastModified = System.currentTimeMillis()
     create(id, item)
   }
 
   @Override
   void delete(String id) {
-
-    def pipeline = findById(id)
-
     redisTemplate.opsForHash().delete(bookkeepingKey(), key(id))
-    redisTemplate.opsForHash().delete(bookkeepingKey(), pipeline.application)
-    redisTemplate.opsForHash().delete(bookkeepingKey(), key(pipeline.application, pipeline.name))
-    redisTemplate.opsForSet().remove(allKey(), pipeline)
   }
 
   @Override
@@ -105,6 +97,7 @@ class RedisPipelineDAO implements PipelineDAO {
   boolean isHealthy() {
     try {
       def conn = factory.connection
+      conn.ping()
       conn.close()
       return true
     } catch (Exception e) {
