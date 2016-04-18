@@ -107,11 +107,13 @@ class RedisPipelineStrategyDAOSpec extends Specification {
     redisPipelineStrategyDAO.bulkImport([
         new Pipeline([
             name       : "app1",
-            email: "greg@example.com"
+            email: "greg@example.com",
+            application: 'app'
         ]),
         new Pipeline([
             name       : "app2",
-            email: "mark@example.com"
+            email: "mark@example.com",
+            application: 'app'
         ])
     ])
 
@@ -140,8 +142,7 @@ class RedisPipelineStrategyDAOSpec extends Specification {
   }
 
   void deleteAll() {
-    redisPipelineStrategyDAO.redisTemplate.delete(redisPipelineStrategyDAO.redisTemplate.keys(RedisPipelineStrategyDAO.key('*')))
-    redisPipelineStrategyDAO.stringRedisTemplate.delete(RedisPipelineStrategyDAO.bookkeepingKey())
+    redisPipelineStrategyDAO.redisTemplate.delete(RedisPipelineStrategyDAO.bookkeepingKey())
   }
 
 }

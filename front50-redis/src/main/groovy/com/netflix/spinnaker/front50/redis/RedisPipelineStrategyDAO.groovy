@@ -15,25 +15,19 @@
  */
 
 package com.netflix.spinnaker.front50.redis
-
 import com.netflix.spinnaker.front50.exception.NotFoundException
 import com.netflix.spinnaker.front50.model.pipeline.Pipeline
 import com.netflix.spinnaker.front50.model.pipeline.PipelineStrategyDAO
 import org.springframework.data.redis.connection.RedisConnectionFactory
-import org.springframework.data.redis.core.RedisOperations
 import org.springframework.data.redis.core.RedisTemplate
-import org.springframework.data.redis.core.SessionCallback
-import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ScanOptions
 import org.springframework.util.Assert
-
 /**
  * @author Greg Turnquist
  */
 class RedisPipelineStrategyDAO implements PipelineStrategyDAO {
 
   RedisTemplate<String, Pipeline> redisTemplate
-
-  StringRedisTemplate stringRedisTemplate
 
   RedisConnectionFactory factory
 
@@ -53,7 +47,7 @@ class RedisPipelineStrategyDAO implements PipelineStrategyDAO {
 
   @Override
   Pipeline findById(String id) throws NotFoundException {
-    def results = redisTemplate.opsForValue().get(key(id))
+    def results = redisTemplate.opsForHash().get(bookkeepingKey(), id)
     if (!results) {
       throw new NotFoundException("No pipeline found with id '${id}'");
     }
@@ -62,30 +56,20 @@ class RedisPipelineStrategyDAO implements PipelineStrategyDAO {
 
   @Override
   Collection<Pipeline> all() {
-    stringRedisTemplate.opsForSet()
-        .members(bookkeepingKey())
-        .collect { redisTemplate.opsForValue().get(it) }
+    redisTemplate.opsForHash().scan(bookkeepingKey(), ScanOptions.scanOptions().match('*').build())
+        .collect { it.value }
   }
 
   @Override
   Pipeline create(String id, Pipeline item) {
-    redisTemplate.execute({ RedisOperations<String, Pipeline> operations ->
-      operations.multi()
+    Assert.notNull(item.application, "application field must NOT be null!")
+    Assert.notNull(item.name, "name field must NOT be null!")
 
-      item.id = id
-      if (!item.id) {
-        item.id = UUID.randomUUID().toString()
-      }
+    item.id = id ?: UUID.randomUUID().toString()
 
-      def key = key(item.id)
+    redisTemplate.opsForHash().put(bookkeepingKey(), item.id, item)
 
-      redisTemplate.opsForValue().set(key, item)
-      stringRedisTemplate.opsForSet().add(bookkeepingKey(), key)
-
-      operations.exec()
-
-      item
-    } as SessionCallback)
+    item
   }
 
   @Override
@@ -96,16 +80,7 @@ class RedisPipelineStrategyDAO implements PipelineStrategyDAO {
 
   @Override
   void delete(String id) {
-    redisTemplate.execute({ RedisOperations<String, Pipeline> operations ->
-      operations.multi()
-
-      def key = key(id)
-
-      stringRedisTemplate.opsForSet().remove(bookkeepingKey(), key)
-      redisTemplate.delete(key)
-
-      operations.exec()
-    } as SessionCallback)
+    redisTemplate.opsForHash().delete(bookkeepingKey(), id)
   }
 
   @Override
@@ -117,6 +92,7 @@ class RedisPipelineStrategyDAO implements PipelineStrategyDAO {
   boolean isHealthy() {
     try {
       def conn = factory.connection
+      conn.ping()
       conn.close()
       return true
     } catch (Exception e) {
@@ -124,13 +100,8 @@ class RedisPipelineStrategyDAO implements PipelineStrategyDAO {
     }
   }
 
-  static String key(String id) {
-    Assert.notNull(id, 'id can NOT be null!')
-    "com.netflix.spinnaker:front50:pipeline-strategies:key:${id}".toString()
-  }
-
   static String bookkeepingKey() {
-    'com.netflix.spinnaker:front50:pipeline-strategies:keys'
+    'com.netflix.spinnaker:front50:pipeline-strategies'
   }
 
 }

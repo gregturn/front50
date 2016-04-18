@@ -142,9 +142,7 @@ class RedisPipelineDAOSpec extends Specification {
   }
 
   void deleteAll() {
-    redisPipelineDAO.redisTemplate.delete([
-        RedisPipelineDAO.allKey(),
-        RedisPipelineDAO.bookkeepingKey()])
+    redisPipelineDAO.redisTemplate.delete(RedisPipelineDAO.bookkeepingKey())
   }
 
 }

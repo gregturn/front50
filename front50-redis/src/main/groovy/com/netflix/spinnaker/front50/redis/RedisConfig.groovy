@@ -52,16 +52,14 @@ class RedisConfig {
 
   @Bean
   RedisPipelineStrategyDAO redisPipelineStrategyDAO(RedisTemplate<String, Pipeline> template,
-                                                    StringRedisTemplate stringRedisTemplate,
                                                     RedisConnectionFactory connectionFactory) {
-    new RedisPipelineStrategyDAO(redisTemplate: template, stringRedisTemplate: stringRedisTemplate, factory: connectionFactory)
+    new RedisPipelineStrategyDAO(redisTemplate: template, factory: connectionFactory)
   }
 
   @Bean
   RedisPipelineDAO redisPipelineDAO(RedisTemplate<String, Pipeline> template,
-                                    StringRedisTemplate stringRedisTemplate,
                                     RedisConnectionFactory connectionFactory) {
-    new RedisPipelineDAO(redisTemplate: template, stringRedisTemplate: stringRedisTemplate, factory: connectionFactory)
+    new RedisPipelineDAO(redisTemplate: template, factory: connectionFactory)
   }
 
   @Bean
