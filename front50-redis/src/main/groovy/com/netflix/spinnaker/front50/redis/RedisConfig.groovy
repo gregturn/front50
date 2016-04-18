@@ -82,6 +82,8 @@ class RedisConfig {
     template.connectionFactory = connectionFactory
     template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Application))
     template.setKeySerializer(new StringRedisSerializer())
+    template.hashKeySerializer = template.keySerializer
+    template.hashValueSerializer = template.valueSerializer
 
     template
   }
@@ -93,6 +95,8 @@ class RedisConfig {
     template.connectionFactory = connectionFactory
     template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Project))
     template.setKeySerializer(new StringRedisSerializer())
+    template.hashKeySerializer = template.keySerializer
+    template.hashValueSerializer = template.valueSerializer
 
     template
   }
@@ -102,8 +106,10 @@ class RedisConfig {
 
     RedisTemplate<String, Pipeline> template = new RedisTemplate<>()
     template.connectionFactory = connectionFactory
-    template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Pipeline))
-    template.setKeySerializer(new StringRedisSerializer())
+    template.valueSerializer = new Jackson2JsonRedisSerializer<>(Pipeline)
+    template.keySerializer = new StringRedisSerializer()
+    template.hashKeySerializer = template.keySerializer
+    template.hashValueSerializer = template.valueSerializer
 
     template
   }
@@ -115,6 +121,8 @@ class RedisConfig {
     template.connectionFactory = connectionFactory
     template.setValueSerializer(new Jackson2JsonRedisSerializer<>(Notification))
     template.setKeySerializer(new StringRedisSerializer())
+    template.hashKeySerializer = template.keySerializer
+    template.hashValueSerializer = template.valueSerializer
 
     template
   }

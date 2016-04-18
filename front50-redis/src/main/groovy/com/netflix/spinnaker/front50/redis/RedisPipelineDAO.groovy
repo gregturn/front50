@@ -15,17 +15,13 @@
  */
 
 package com.netflix.spinnaker.front50.redis
-
 import com.netflix.spinnaker.front50.exception.NotFoundException
 import com.netflix.spinnaker.front50.model.pipeline.Pipeline
 import com.netflix.spinnaker.front50.model.pipeline.PipelineDAO
 import org.springframework.data.redis.connection.RedisConnectionFactory
-import org.springframework.data.redis.core.RedisOperations
 import org.springframework.data.redis.core.RedisTemplate
-import org.springframework.data.redis.core.SessionCallback
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.util.Assert
-
 /**
  * @author Greg Turnquist
  */
@@ -39,21 +35,17 @@ class RedisPipelineDAO implements PipelineDAO {
 
   @Override
   String getPipelineId(String application, String pipelineName) {
-    all().find { pipeline ->
-      pipeline.name == pipelineName && pipeline.application == application
-    }.id
+    redisTemplate.opsForHash().get(bookkeepingKey(), key(application, pipelineName)).id
   }
 
   @Override
   Collection<Pipeline> getPipelinesByApplication(String application) {
-    all().findAll { pipeline ->
-      pipeline.application == application
-    }
+    [redisTemplate.opsForHash().get(bookkeepingKey(), application)]
   }
 
   @Override
   Pipeline findById(String id) throws NotFoundException {
-    def results = redisTemplate.opsForValue().get(key(id))
+    def results = redisTemplate.opsForHash().get(bookkeepingKey(), key(id))
     if (!results) {
       throw new NotFoundException("No pipeline found with id '${id}'");
     }
@@ -62,50 +54,46 @@ class RedisPipelineDAO implements PipelineDAO {
 
   @Override
   Collection<Pipeline> all() {
-    stringRedisTemplate.opsForSet()
-        .members(bookkeepingKey())
-        .collect { redisTemplate.opsForValue().get(it) }
+    redisTemplate.opsForSet().members(allKey())
   }
 
   @Override
   Pipeline create(String id, Pipeline item) {
-    redisTemplate.execute({ RedisOperations<String, Pipeline> operations ->
-      operations.multi()
 
-      item.id = id
-      if (!item.id) {
-        item.id = UUID.randomUUID().toString()
-      }
+    Assert.notNull(item.application, "application field must NOT be null!")
+    Assert.notNull(item.name, "name field must NOT be null!")
 
-      def key = key(item.id)
+    item.id = id
+    if (!item.id) {
+      item.id = UUID.randomUUID().toString()
+    }
 
-      redisTemplate.opsForValue().set(key, item)
-      stringRedisTemplate.opsForSet().add(bookkeepingKey(), key)
+    redisTemplate.opsForHash().put(bookkeepingKey(), key(item.id), item)
+    redisTemplate.opsForHash().put(bookkeepingKey(), item.application, item)
+    redisTemplate.opsForHash().put(bookkeepingKey(), key(item.application, item.name), item)
+    redisTemplate.opsForSet().add(allKey(), item)
 
-      operations.exec()
-
-      item
-    } as SessionCallback)
+    item
   }
 
   @Override
   void update(String id, Pipeline item) {
+
+    redisTemplate.opsForSet().remove(allKey(), findById(id))
+
     item.lastModified = System.currentTimeMillis()
     create(id, item)
   }
 
   @Override
   void delete(String id) {
-    redisTemplate.execute({ RedisOperations<String, Pipeline> operations ->
-      operations.multi()
 
-      def key = key(id)
+    def pipeline = findById(id)
 
-      stringRedisTemplate.opsForSet().remove(bookkeepingKey(), key)
-      redisTemplate.delete(key)
-
-      operations.exec()
-    } as SessionCallback)
+    redisTemplate.opsForHash().delete(bookkeepingKey(), key(id))
+    redisTemplate.opsForHash().delete(bookkeepingKey(), pipeline.application)
+    redisTemplate.opsForHash().delete(bookkeepingKey(), key(pipeline.application, pipeline.name))
+    redisTemplate.opsForSet().remove(allKey(), pipeline)
   }
 
   @Override
@@ -127,6 +115,16 @@ class RedisPipelineDAO implements PipelineDAO {
   static String key(String id) {
     Assert.notNull(id, 'id can NOT be null!')
     "com.netflix.spinnaker:front50:pipelines:key:${id}".toString()
+  }
+
+  static String key(String applicationName, String pipelineName) {
+    Assert.notNull(pipelineName, "pipelineName can NOT be null!")
+    Assert.notNull(applicationName, "applicationName can NOT be null!")
+    "com.netflix.spinnaker:front50:pipelines:${pipelineName}:${applicationName}".toString()
+  }
+
+  static String allKey() {
+    'com.netflix.spinnaker:front50:pipelines:keys:all'
   }
 
   static String bookkeepingKey() {
